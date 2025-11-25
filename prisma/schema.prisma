@@ -1,0 +1,193 @@
+// 生成 Prisma Client 的配置
+generator client {
+  provider = "prisma-client-js"
+}
+
+// 连接 Supabase Postgres 的配置
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// 用户角色：学生 / 老师 / 管理员
+enum UserRole {
+  STUDENT
+  TEACHER
+  ADMIN
+}
+
+// 单词掌握状态
+enum WordStatus {
+  NEW
+  LEARNING
+  REVIEWING
+  MASTERED
+}
+
+// 练习 / 测试的题型
+enum ReviewMode {
+  SINGLE_MEANING_CHOICE   // 英文 → 选中文
+  SINGLE_WORD_CHOICE      // 中文 → 选英文单词
+  SPELLING                // 拼写
+  SENTENCE_GAP            // 例句挖空
+  STORY_GAP               // 故事挖空
+}
+
+// 用户表（老师 + 学生）
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  email     String?  @unique
+  role      UserRole @default(STUDENT)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  studyLogs StudyLog[]
+
+  // 关系
+  studentProfile     StudentProfile?
+  wordSets           WordSet[]            @relation("TeacherWordSets")
+  studentProgresses  StudentWordProgress[]
+  reviewLogs         ReviewLog[]
+  xpEvents           XPEvent[]
+  createdWords       Word[]               @relation("WordCreatedBy")
+}
+
+// 学生扩展信息（等级、积分、里程碑等）
+model StudentProfile {
+  id                String   @id @default(cuid())
+  userId            String   @unique
+  level             Int      @default(1)
+  xp                Int      @default(0)
+  totalWordsLearned Int      @default(0)
+  avatarType        String?  // 虚拟人物外观类型
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+// 单词主表
+model Word {
+  id               String   @id @default(cuid())
+  text             String   // 单词本身，如 "resilient"
+  phonetic         String?  // 音标
+  pos              String?  // 词性
+  meanings         Json?    // 常用释义（英文+中文，可做成数组）
+  exampleSentences Json?    // 例句（英文+中文）
+  syllables        String?  // 音节拆分，如 re-zi-li-ent
+  wordRoots        String?  // 词根词缀解释
+  mnemonics        String?  // 联想 / 谐音记忆
+  phrases          Json?    // 短语或句型（可做数组）
+  audioUrl         String?  // 发音音频地址
+    // MVP 用的简单释义和例句（先不用 Json，方便你操作）
+  meaningEn       String?  // 简短英文释义
+  meaningZh       String?  // 简短中文释义
+  exampleEn       String?  // 单个例句（英文）
+  exampleZh       String?  // 单个例句（中文）
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  createdByUserId String?
+  createdBy       User?     @relation("WordCreatedBy", fields: [createdByUserId], references: [id])
+
+  wordSetWords        WordSetWord[]
+  studentProgresses   StudentWordProgress[]
+  reviewLogs          ReviewLog[]
+  studyLogs   StudyLog[]
+
+}
+
+// 老师布置的单词包（每周词汇 / 单元词汇）
+model WordSet {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  createdByUserId String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @default(now())
+    // 故事相关（可选）
+  storyEn       String?  // 英文故事
+  storyZh       String?  // 中文故事
+  storyAudioUrl String?  // 故事音频地址（将来用）
+  storyImageUrl String?  // 故事配图地址（将来用）
+
+
+  createdBy User @relation("TeacherWordSets", fields: [createdByUserId], references: [id])
+  words     WordSetWord[]
+}
+
+// 关联：某个单词包中包含哪些单词
+model WordSetWord {
+  id         String @id @default(cuid())
+  wordSetId  String
+  wordId     String
+  orderIndex Int    @default(0) // 在单词包中的顺序
+
+  wordSet WordSet @relation(fields: [wordSetId], references: [id])
+  word    Word    @relation(fields: [wordId], references: [id])
+}
+
+
+// 学生 × 单词 的当前掌握状态（核心：陌生单词、记忆曲线）
+model StudentWordProgress {
+  id               String     @id @default(cuid())
+  studentId        String
+  wordId           String
+  status           WordStatus @default(NEW)
+  isStranger       Boolean    @default(false) // 是否标记为“陌生词”
+  familiarityScore Int        @default(0)     // 熟悉度 0~100
+  nextReviewAt     DateTime?  // 下一次建议复习时间（艾宾浩斯）
+  lastReviewedAt   DateTime?  // 最后复习时间
+  correctCount     Int        @default(0)
+  wrongCount       Int        @default(0)
+  dontKnowCount    Int        @default(0)
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+
+  student User @relation(fields: [studentId], references: [id])
+  word    Word @relation(fields: [wordId], references: [id])
+
+  @@unique([studentId, wordId]) // 每个学生 × 单词 只保留一条进度
+}
+
+// 每道练习 / 测试题的作答记录
+model ReviewLog {
+  id                 String     @id @default(cuid())
+  studentId          String
+  wordId             String
+  mode               ReviewMode
+  isCorrect          Boolean
+  usedHintAudio      Boolean    @default(false) // 是否点了发音提示
+  usedHintShowAnswer Boolean    @default(false) // 是否点了“我不会”
+  answeredAt         DateTime   @default(now())
+
+  student User @relation(fields: [studentId], references: [id])
+  word    Word @relation(fields: [wordId], references: [id])
+}
+
+// 积分变动流水（支持升级、兑换奖励等）
+model XPEvent {
+  id        String   @id @default(cuid())
+  studentId String
+  points    Int      // 正数为增加积分
+  reason    String?  // 备注：完成任务 / 完成复习 / 连续打卡等
+  createdAt DateTime @default(now())
+
+  student User @relation(fields: [studentId], references: [id])
+}
+
+model StudyLog {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+
+  userId    String
+  wordId    String
+
+  // 学习状态快照
+  isFamiliar Boolean   // 当次学习时，学生是否觉得“会”
+  isStranger Boolean   // 是否被当次标记为“陌生单词”
+  action     String    // 动作类型，比如 "mark_known" / "mark_unknown" / "review_fill" 等
+
+  user User @relation(fields: [userId], references: [id])
+  word Word @relation(fields: [wordId], references: [id])
+}

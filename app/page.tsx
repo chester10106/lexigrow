@@ -13,12 +13,27 @@ export default function Home() {
           priority
         />
         <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-             Welcome to LexiGrow 
-          <p className="mt-2 text-sm text-gray-500">
-            一个帮助学生背单词、升级成长的学习系统。
-          </p>
-          </h1>
+<h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
+  Welcome to LexiGrow
+</h1>
+<p className="mt-2 text-sm text-gray-500">
+  一个帮助学生背单词、升级成长的学习系统。
+</p>
+<div className="mt-6 flex gap-4">
+  <a
+    href="/student"
+    className="rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 transition"
+  >
+    学生入口
+  </a>
+
+  <a
+    href="/teacher"
+    className="rounded-md bg-green-600 px-4 py-2 text-white hover:bg-green-700 transition"
+  >
+    老师入口
+  </a>
+</div>
           <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
             Looking for a starting point or more instructions? Head over to{" "}
             <a
